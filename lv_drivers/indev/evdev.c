@@ -72,9 +72,12 @@ void evdev_refresh_press_ts(void)
 void evdev_init(void)
 {
     evdev_refresh_press_ts();
+    printf("evdev init ");
     if(!evdev_set_file(EVDEV_NAME)) {
+        printf("failed\n");
         return;
     }
+    printf("succeeded\n");
 
 #if USE_XKB
     xkb_init();
@@ -121,27 +124,118 @@ bool evdev_set_file(char * dev_name)
  */
 void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 {
-    uint8_t buf[16];
+    struct input_event in;
 
-    while(read(evdev_fd, buf, 16) > 0) {
-        int type = *(int *)(buf + 8);
-        int val  = *(int *)(buf + 12);
-
-        switch(type) {
-            case 3473411: evdev_root_x = 240 - val; break;
-            case 3538947:
-                evdev_root_y = val;
-                evdev_button = LV_INDEV_STATE_PR;
-                // printf("[tp]press x=%d, y=%d\n", evdev_root_x, evdev_root_y);
-
-                evdev_refresh_press_ts();
-                break;
-            case 21626881:
-                evdev_button = LV_INDEV_STATE_REL;
-                // printf("[tp]release x=%d, y=%d\n", evdev_root_x, evdev_root_y);
-                break;
+    while(read(evdev_fd, &in, sizeof(struct input_event)) > 0) {
+        //printf("type=%d, code=%d, value=%d\n", in.type, in.code, in.value);
+        if(in.type == EV_REL) {
+            if(in.code == REL_X)
+				#if EVDEV_SWAP_AXES
+					evdev_root_y += in.value;
+				#else
+					evdev_root_x += in.value;
+				#endif
+            else if(in.code == REL_Y)
+				#if EVDEV_SWAP_AXES
+					evdev_root_x += in.value;
+				#else
+					evdev_root_y += in.value;
+				#endif
+        } else if(in.type == EV_ABS) {
+        	evdev_refresh_press_ts();
+            if(in.code == ABS_X)
+				#if EVDEV_SWAP_AXES
+					evdev_root_y = in.value;
+				#else
+					evdev_root_x = in.value;
+				#endif
+            else if(in.code == ABS_Y)
+				#if EVDEV_SWAP_AXES
+					evdev_root_x = in.value;
+				#else
+					evdev_root_y = in.value;
+				#endif
+            else if(in.code == ABS_MT_POSITION_X)
+                                #if EVDEV_SWAP_AXES
+                                        evdev_root_y = in.value;
+                                #else
+                                        evdev_root_x = in.value;
+                                #endif
+            else if(in.code == ABS_MT_POSITION_Y)
+                                #if EVDEV_SWAP_AXES
+                                        evdev_root_x = in.value;
+                                #else
+                                        evdev_root_y = in.value;
+                                #endif
+            else if(in.code == ABS_MT_TRACKING_ID) {
+                                if(in.value == -1)
+                                    evdev_button = LV_INDEV_STATE_REL;
+                                else if(in.value == 0)
+                                    evdev_button = LV_INDEV_STATE_PR;
+            }
+        } else if(in.type == EV_KEY) {
+            if(in.code == BTN_MOUSE || in.code == BTN_TOUCH) {
+                if(in.value == 0)
+                    evdev_button = LV_INDEV_STATE_REL;
+                else if(in.value == 1)
+                    evdev_button = LV_INDEV_STATE_PR;
+            } else if(drv->type == LV_INDEV_TYPE_KEYPAD) {
+#if USE_XKB
+                data->key = xkb_process_key(in.code, in.value != 0);
+#else
+                switch(in.code) {
+                    case KEY_BACKSPACE:
+                        data->key = LV_KEY_BACKSPACE;
+                        break;
+                    case KEY_ENTER:
+                        data->key = LV_KEY_ENTER;
+                        break;
+                    case KEY_PREVIOUS:
+                        data->key = LV_KEY_PREV;
+                        break;
+                    case KEY_NEXT:
+                        data->key = LV_KEY_NEXT;
+                        break;
+                    case KEY_UP:
+                        data->key = LV_KEY_UP;
+                        break;
+                    case KEY_LEFT:
+                        data->key = LV_KEY_LEFT;
+                        break;
+                    case KEY_RIGHT:
+                        data->key = LV_KEY_RIGHT;
+                        break;
+                    case KEY_DOWN:
+                        data->key = LV_KEY_DOWN;
+                        break;
+                    case KEY_TAB:
+                        data->key = LV_KEY_NEXT;
+                        break;
+                    default:
+                        data->key = 0;
+                        break;
+                }
+#endif /* USE_XKB */
+                if (data->key != 0) {
+                    /* Only record button state when actual output is produced to prevent widgets from refreshing */
+                    data->state = (in.value) ? LV_INDEV_STATE_PR : LV_INDEV_STATE_REL;
+                }
+                evdev_key_val = data->key;
+                evdev_button = data->state;
+                return;
+            }
         }
     }
+
+    if(drv->type == LV_INDEV_TYPE_KEYPAD) {
+        /* No data retrieved */
+        data->key = evdev_key_val;
+        data->state = evdev_button;
+        return;
+    }
+    if(drv->type != LV_INDEV_TYPE_POINTER)
+        return ;
+    /*Store the collected data*/
 
 #if EVDEV_CALIBRATE
     data->point.x = map(evdev_root_x, EVDEV_HOR_MIN, EVDEV_HOR_MAX, 0, drv->disp->driver->hor_res);
@@ -153,14 +247,18 @@ void evdev_read(lv_indev_drv_t * drv, lv_indev_data_t * data)
 
     data->state = evdev_button;
 
-    if(data->point.x < 0) data->point.x = 0;
-    if(data->point.y < 0) data->point.y = 0;
-    if(data->point.x >= drv->disp->driver->hor_res) data->point.x = drv->disp->driver->hor_res - 1;
-    if(data->point.y >= drv->disp->driver->ver_res) data->point.y = drv->disp->driver->ver_res - 1;
+    if(data->point.x < 0)
+      data->point.x = 0;
+    if(data->point.y < 0)
+      data->point.y = 0;
+    if(data->point.x >= drv->disp->driver->hor_res)
+      data->point.x = drv->disp->driver->hor_res - 1;
+    if(data->point.y >= drv->disp->driver->ver_res)
+      data->point.y = drv->disp->driver->ver_res - 1;
 
-    return;
+    return ;
 }
-
+ 
 /**********************
  *   STATIC FUNCTIONS
  **********************/
