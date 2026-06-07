@@ -65,6 +65,8 @@ static void lv_btn_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj)
 
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(obj, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    // Modified.
+    lv_obj_clear_flag(obj, LV_OBJ_FLAG_PRESS_LOCK);
 
     LV_TRACE_OBJ_CREATE("finished");
 }
