@@ -411,8 +411,8 @@ static void lv_obj_constructor(const lv_obj_class_t * class_p, lv_obj_t * obj)
     /*Set attributes*/
     obj->flags = LV_OBJ_FLAG_CLICKABLE;
     obj->flags |= LV_OBJ_FLAG_SNAPPABLE;
-    // Modified. This function is bad in most situations.
-    //if(parent) obj->flags |= LV_OBJ_FLAG_PRESS_LOCK;
+    // Reverted. This function is bad for buttons only.
+    if(parent) obj->flags |= LV_OBJ_FLAG_PRESS_LOCK;
     if(parent) obj->flags |= LV_OBJ_FLAG_SCROLL_CHAIN;
     obj->flags |= LV_OBJ_FLAG_CLICK_FOCUSABLE;
     obj->flags |= LV_OBJ_FLAG_SCROLLABLE;
