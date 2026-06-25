@@ -1,0 +1,6 @@
+{
+    "cmake.ignoreCMakeListsMissing": true,
+    "files.exclude": {
+        "**/*.o": true
+    }
+}
