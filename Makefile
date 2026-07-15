@@ -10,7 +10,6 @@ LDFLAGS ?= -L$(LVGL_DIR)/lib -Wl,-rpath,'/mnt/UDISK/lib:/mnt/app/lib:/mnt/app/de
 BIN = liblvgl.so
 
 include $(LVGL_DIR)/lvgl/lvgl.mk
-include $(LVGL_DIR)/lv_drivers/lv_drivers.mk
 
 #CSRCS +=$(LVGL_DIR)/mouse_cursor_icon.c 
 
